@@ -4,25 +4,18 @@ pragma solidity ^0.8.4;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./APIConsumer.sol";
 
-interface IProofOfHumanity {
-    function isRegistered(address _address) external view returns (bool);
-}
-
-struct Platform {
-    uint256 id;
-    string name;
-    string apiAddressURL;
-    string apiIdURL;
-}
-
 contract PoHVerifier is APIConsumer {
-    event Verification(address indexed caller, uint256 indexed twitterUserID);
+    event Verification(
+        uint8 platformId,
+        address indexed caller,
+        uint256 indexed twitterUserID
+    );
 
     address public poHAddress;
 
     // address => twitter account id
-    mapping(address => uint256) public verifiedAddress;
-    mapping(uint256 => address) public verifiedUserId;
+    mapping(uint8 => mapping(address => uint256)) public verifiedAddress;
+    mapping(uint8 => mapping(uint256 => address)) public verifiedUserId;
 
     modifier isRegistered() {
         require(
@@ -45,18 +38,30 @@ contract PoHVerifier is APIConsumer {
     //     _setPoHAddress(_address);
     // }
 
-    function verify(string memory _tweetId)
+    function verifyByPostId(uint8 _platformId, string memory _postId)
         external
         isRegistered
-        returns (bytes32 requestId)
     {
-        requestId = _requestTweetAddressHash(_tweetId);
+        require(
+            platforms[_platformId].verificationInput ==
+                VerificationInput.POST_ID,
+            "Wrong verification function"
+        );
+        _requestAddressHash(_platformId, _postId);
     }
+
+    // function verify(string memory _tweetId)
+    //     external
+    //     isRegistered
+    //     returns (bytes32 requestId)
+    // {
+    //     requestId = _requestTweetAddressHash(_tweetId);
+    // }
 
     /**
      * Receive the response in the form of uint256
      */
-    function fulfillTweetAddressHashRequest(bytes32 _requestId, uint256 _hash)
+    function fulfillAddressHashRequest(bytes32 _requestId, uint256 _hash)
         public
         override
         recordChainlinkFulfillment(_requestId)
@@ -66,25 +71,30 @@ contract PoHVerifier is APIConsumer {
             _hash == uint256(keccak256(abi.encodePacked(request.caller))),
             "Not same address, caller and tweet"
         );
-        _requestTweetAuthor(request);
+        _requestUserId(request);
     }
 
     /**
      * Receive the response in the form of uint256
      */
-    function fulfillTweetAuthorRequest(bytes32 _requestId, uint256 _userId)
+    function fulfillUserIdRequest(bytes32 _requestId, uint256 _userId)
         public
         override
         recordChainlinkFulfillment(_requestId)
     {
         require(_userId != 0, "API Error");
-        address _caller = requests[_requestId].caller;
-        verifiedAddress[_caller] = _userId;
-        verifiedUserId[_userId] = _caller;
-        emit Verification(_caller, _userId);
+        RequestData memory _request = requests[_requestId];
+
+        address _caller = _request.caller;
+        uint8 _platformId = _request.platformId;
+
+        verifiedAddress[_platformId][_caller] = _userId;
+        verifiedUserId[_platformId][_userId] = _caller;
+
+        emit Verification(_platformId, _caller, _userId);
     }
 
-    function verified() external view returns (uint256) {
-        return verifiedAddress[_msgSender()];
+    function verified(uint8 _platformId) external view returns (uint256) {
+        return verifiedAddress[_platformId][_msgSender()];
     }
 }

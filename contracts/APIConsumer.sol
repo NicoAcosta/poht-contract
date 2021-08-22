@@ -3,12 +3,31 @@ pragma solidity ^0.8;
 
 import "@chainlink/contracts/src/v0.8/ChainlinkClient.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./PoHVerifier.sol";
+// import "./PoHVerifier.sol";
 
 struct RequestData {
     address caller;
-    uint8 plaftormId;
-    string postId;
+    uint8 platformId;
+    string parameter;
+}
+
+interface IProofOfHumanity {
+    function isRegistered(address _address) external view returns (bool);
+}
+
+struct Platform {
+    string name;
+    string apiAddressURL;
+    string apiUserIdURL;
+    VerificationInput verificationInput;
+}
+
+// Platform("Twitter", "url", "url", postId)
+
+enum VerificationInput {
+    userId,
+    username,
+    POST_ID
 }
 
 abstract contract APIConsumer is ChainlinkClient, Ownable {
@@ -22,6 +41,7 @@ abstract contract APIConsumer is ChainlinkClient, Ownable {
     string public apiAuthorURL;
 
     mapping(bytes32 => RequestData) internal requests;
+    Platform[] public platforms;
 
     constructor() {
         link = 0xa36085F69e2889c224210F603D836748e7dC0088;
@@ -47,49 +67,54 @@ abstract contract APIConsumer is ChainlinkClient, Ownable {
         return chainlinkTokenAddress();
     }
 
-    function makeRequest(
-        bytes4 _callbackFunction,
+    function _makeRequest(
+        uint8 _platformId,
+        string memory _queryParameter,
         string memory _apiURL,
-        string memory _tweetId,
+        bytes4 _callbackFunction,
         address _caller
-    ) internal returns (bytes32 requestId) {
+    ) internal {
         Chainlink.Request memory request = buildChainlinkRequest(
             getUInt256JobId,
             address(this),
             _callbackFunction
         );
 
-        string memory _query = string(abi.encodePacked("tweetId=", _tweetId));
+        string memory _params = string(
+            abi.encodePacked("param=", _queryParameter)
+        );
 
         request.add("get", _apiURL);
-        request.add("queryParams", _query);
+        request.add("queryParams", _params);
         // request.add("path", "data");
 
-        requestId = sendChainlinkRequestTo(oracle, request, oracleFee);
+        bytes32 requestId = sendChainlinkRequestTo(oracle, request, oracleFee);
 
-        requests[requestId] = RequestData(_tweetId, _caller);
+        requests[requestId] = RequestData(
+            _caller,
+            _platformId,
+            _queryParameter
+        );
     }
 
-    function _requestTweetAddressHash(string memory _tweetId)
+    function _requestAddressHash(uint8 _platformId, string memory _param)
         internal
-        returns (bytes32 requestId)
     {
-        requestId = makeRequest(
-            this.fulfillTweetAddressHashRequest.selector,
-            apiAddressURL,
-            _tweetId,
+        _makeRequest(
+            _platformId,
+            _param,
+            platforms[_platformId].apiAddressURL,
+            this.fulfillAddressHashRequest.selector,
             _msgSender()
         );
     }
 
-    function _requestTweetAuthor(RequestData memory _previousRequest)
-        internal
-        returns (bytes32 requestId)
-    {
-        requestId = makeRequest(
-            this.fulfillTweetAuthorRequest.selector,
-            apiAuthorURL,
-            _previousRequest.tweetId,
+    function _requestUserId(RequestData memory _previousRequest) internal {
+        _makeRequest(
+            _previousRequest.platformId,
+            _previousRequest.parameter,
+            platforms[_previousRequest.platformId].apiUserIdURL,
+            this.fulfillUserIdRequest.selector,
             _previousRequest.caller
         );
     }
@@ -97,14 +122,14 @@ abstract contract APIConsumer is ChainlinkClient, Ownable {
     /**
      * Receive the response in the form of uint256
      */
-    function fulfillTweetAddressHashRequest(bytes32 _requestId, uint256 _hash)
+    function fulfillAddressHashRequest(bytes32 _requestId, uint256 _hash)
         public
         virtual;
 
     /**
      * Receive the response in the form of uint256
      */
-    function fulfillTweetAuthorRequest(bytes32 _requestId, uint256 _userId)
+    function fulfillUserIdRequest(bytes32 _requestId, uint256 _userId)
         public
         virtual;
 
