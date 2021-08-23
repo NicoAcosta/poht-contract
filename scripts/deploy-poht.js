@@ -21,8 +21,8 @@ async function main() {
 	// 	'https://us-central1-pohtwitter.cloudfunctions.net/api/tweet-author/'
 
 	// We get the contract to deploy
-	const PoHTwitterV5 = await hre.ethers.getContractFactory('PoHTwitterV5')
-	const contract = await PoHTwitterV5
+	const PoHVerifierV1 = await hre.ethers.getContractFactory('PoHVerifierV1')
+	const contract = await PoHVerifierV1
 		.deploy
 		// _poHAddress,
 		// _linkAddress,
@@ -36,7 +36,7 @@ async function main() {
 
 	await contract.deployed()
 
-	console.log('PoHTwitterV5 deployed to: ', contract.address)
+	console.log('PoHVerifierV1 deployed to: ', contract.address)
 }
 
 // We recommend this pattern to be able to use async/await everywhere

@@ -2,54 +2,51 @@
 pragma solidity ^0.8;
 
 import "@chainlink/contracts/src/v0.8/ChainlinkClient.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-// import "./PoHVerifier.sol";
+import "./Platforms.sol";
 
+/// @notice Each request information.
+/// @dev Emitted when a request is made. Its used in callback functions for request's context information.
 struct RequestData {
+    // The address which called the function that made the request.
     address caller;
-    uint8 platformId;
+    // The platform to be verified
+    uint256 platformId;
+    // The API query parameter. Can be userId, postId, userName.
     string parameter;
 }
 
-interface IProofOfHumanity {
-    function isRegistered(address _address) external view returns (bool);
-}
-
-struct Platform {
-    string name;
-    string apiAddressURL;
-    string apiUserIdURL;
-    VerificationInput verificationInput;
-}
-
-// Platform("Twitter", "url", "url", postId)
-
-enum VerificationInput {
-    userId,
-    username,
-    POST_ID
-}
-
-abstract contract APIConsumer is ChainlinkClient, Ownable {
+/// @title APIConsumer
+/// @author Nicolás Acosta
+/// @notice Used to request all the information needed to verify accounts. Talks to each platform's database.
+/// @dev Uses a Chainlink oracle to make API calls, to verify that the ownership of a Platform user.
+abstract contract APIConsumer is ChainlinkClient, Platforms {
     using Chainlink for Chainlink.Request;
 
+    /// @notice $LINK (Chainlink's token) address.
+    /// @dev Explain to a developer any extra details.
     address public link;
-    address public oracle;
-    bytes32 public getUInt256JobId;
-    uint256 public oracleFee;
-    string public apiAddressURL;
-    string public apiAuthorURL;
 
+    /// @notice Chainlink's oracle address.
+    /// @dev The address of the contract that will make the Platforms' information requests.
+    address public oracle;
+
+    /// @notice A chainlink's [HttpGet > JsonParse > Multiply > Uint256 > Eth tx] job Id.
+    /// @dev The id of the program that needs to be ejecuted to get the Platforms' information.
+    bytes32 public getUInt256JobId;
+
+    /// @notice The Chainlink's job fee.
+    /// @dev The fee that has to be paid for every request.
+    uint256 public oracleFee;
+
+    /// @notice Each request infomartion is saved here.
+    /// @dev Chainlink's requestId => RequestData information. Its used in callback functions for request's context information.
     mapping(bytes32 => RequestData) internal requests;
-    Platform[] public platforms;
 
     constructor() {
         link = 0xa36085F69e2889c224210F603D836748e7dC0088;
         oracle = 0xc57B33452b4F7BB189bB5AfaE9cc4aBa1f7a4FD8;
         getUInt256JobId = "d5270d1c311941d0b08bead21fea7747";
         oracleFee = 0.1 * 10**18;
-        apiAddressURL = "https://us-central1-pohtwitter.cloudfunctions.net/api/tweet-address-hash";
-        apiAuthorURL = "https://us-central1-pohtwitter.cloudfunctions.net/api/tweet-author";
 
         if (link == address(0)) {
             setPublicChainlinkToken();
@@ -67,29 +64,42 @@ abstract contract APIConsumer is ChainlinkClient, Ownable {
         return chainlinkTokenAddress();
     }
 
+    /// @notice Requests a Platform's information.
+    /// @dev Creates a Chainlink request to the API.
+    /// @param _platformId The platform to verify
+    /// @param _queryParameter The information to verify. A user's id, username, address.
+    /// @param _callbackFunction The function that will be ejecuted once the information was fetched.
+    /// @param _caller The address that started the verifiaction process.
     function _makeRequest(
-        uint8 _platformId,
+        uint256 _platformId,
         string memory _queryParameter,
         string memory _apiURL,
         bytes4 _callbackFunction,
         address _caller
     ) internal {
+        // Set the request's information
         Chainlink.Request memory request = buildChainlinkRequest(
             getUInt256JobId,
             address(this),
             _callbackFunction
         );
 
-        string memory _params = string(
-            abi.encodePacked("param=", _queryParameter)
+        // Concat the query string => "param=someUserId"
+        bytes memory _params = bytes.concat(
+            bytes("param="),
+            bytes(_queryParameter)
         );
 
+        // Set the URL of the API call.
         request.add("get", _apiURL);
-        request.add("queryParams", _params);
-        // request.add("path", "data");
 
+        // Set the query parameters.
+        request.add("queryParams", string(_params));
+
+        // Send Chainlink request and get its id.
         bytes32 requestId = sendChainlinkRequestTo(oracle, request, oracleFee);
 
+        // Save request information for its callback.
         requests[requestId] = RequestData(
             _caller,
             _platformId,
@@ -97,59 +107,54 @@ abstract contract APIConsumer is ChainlinkClient, Ownable {
         );
     }
 
-    function _requestAddressHash(uint8 _platformId, string memory _param)
-        internal
-    {
+    /// @notice Request the address mentioned in the platform.
+    function _requestTwoStepAddressHash(
+        uint256 _platformId,
+        string memory _param
+    ) internal {
         _makeRequest(
             _platformId,
             _param,
             platforms[_platformId].apiAddressURL,
-            this.fulfillAddressHashRequest.selector,
+            this.fulfillTwoStepAddressHashRequest.selector,
             _msgSender()
         );
     }
 
-    function _requestUserId(RequestData memory _previousRequest) internal {
+    function _requestTwoStepUserId(RequestData memory _previousRequest)
+        internal
+    {
         _makeRequest(
             _previousRequest.platformId,
             _previousRequest.parameter,
             platforms[_previousRequest.platformId].apiUserIdURL,
-            this.fulfillUserIdRequest.selector,
+            this.fulfillTwoStepUserIdRequest.selector,
             _previousRequest.caller
         );
     }
 
-    /**
-     * Receive the response in the form of uint256
-     */
-    function fulfillAddressHashRequest(bytes32 _requestId, uint256 _hash)
+    function _requestOneStepAddressHash(
+        uint256 _platformId,
+        string memory _param
+    ) internal {
+        _makeRequest(
+            _platformId,
+            _param,
+            platforms[_platformId].apiAddressURL,
+            this.fulfillOneStepAddressHashRequest.selector,
+            _msgSender()
+        );
+    }
+
+    function fulfillTwoStepAddressHashRequest(bytes32 _requestId, uint256 _hash)
         public
         virtual;
 
-    /**
-     * Receive the response in the form of uint256
-     */
-    function fulfillUserIdRequest(bytes32 _requestId, uint256 _userId)
+    function fulfillTwoStepUserIdRequest(bytes32 _requestId, uint256 _userId)
         public
         virtual;
 
-    // function _setFee(uint256 _linkAmount) internal {
-    //     oracleFee = _linkAmount * 10**18;
-    // }
-
-    // function _setChainlinkAddress(address _address) internal {
-    //     chainlinkAddress = _address;
-    // }
-
-    // function setChainlinkAddress(address _address) external onlyOwner {
-    //     _setChainlinkAddress(_address);
-    // }
-
-    // function _setChainlinkJobId(string memory _jobId) internal {
-    //     chainlinkJobId = _jobId;
-    // }
-
-    // function setChainlinkJobId(string memory _jobId) external onlyOwner {
-    //     _setChainlinkJobId(_jobId);
-    // }
+    function fulfillOneStepAddressHashRequest(bytes32 _requestId, uint256 _hash)
+        public
+        virtual;
 }
