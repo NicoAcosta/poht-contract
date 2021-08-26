@@ -12,7 +12,7 @@ struct RequestData {
     // The platform to be verified
     uint256 platformId;
     // The API query parameter. Can be userId, postId, userName.
-    string parameter;
+    uint256 userId;
 }
 
 /// @title APIConsumer
@@ -42,11 +42,14 @@ abstract contract APIConsumer is ChainlinkClient, Platforms {
     /// @dev Chainlink's requestId => RequestData information. Its used in callback functions for request's context information.
     mapping(bytes32 => RequestData) internal requests;
 
+    string public apiBaseURL;
+
     constructor() {
         link = 0xa36085F69e2889c224210F603D836748e7dC0088;
         oracle = 0xc57B33452b4F7BB189bB5AfaE9cc4aBa1f7a4FD8;
         getUInt256JobId = "d5270d1c311941d0b08bead21fea7747";
         oracleFee = 0.1 * 10**18;
+        apiBaseURL = "https://pohtwitter.web.app/api/";
 
         if (link == address(0)) {
             setPublicChainlinkToken();
@@ -72,89 +75,113 @@ abstract contract APIConsumer is ChainlinkClient, Platforms {
     /// @param _caller The address that started the verifiaction process.
     function _makeRequest(
         uint256 _platformId,
-        string memory _queryParameter,
-        string memory _apiURL,
-        bytes4 _callbackFunction,
-        address _caller
+        uint256 _userId // bool secondStep, bytes4 _callbackFunction, address _caller
     ) internal {
+        Platform memory _platform = platforms[_platformId];
+
         // Set the request's information
         Chainlink.Request memory request = buildChainlinkRequest(
             getUInt256JobId,
             address(this),
-            _callbackFunction
+            this.fulfillOneStepAddressHashRequest.selector
         );
 
         // Concat the query string => "param=someUserId"
-        bytes memory _params = bytes.concat(
-            bytes("param="),
-            bytes(_queryParameter)
+        string memory _params = string(
+            bytes.concat(bytes("param="), bytes(uint2str(_userId)))
+        );
+
+        // api/platform/1 or api/platform/2
+        string memory _url = string(
+            bytes.concat(
+                bytes(apiBaseURL),
+                bytes(_platform.name)
+                // ,bytes((secondStep ? "/2" : "/1"))
+            )
         );
 
         // Set the URL of the API call.
-        request.add("get", _apiURL);
+        request.add("get", _url);
 
         // Set the query parameters.
-        request.add("queryParams", string(_params));
+        request.add("queryParams", _params);
 
         // Send Chainlink request and get its id.
         bytes32 requestId = sendChainlinkRequestTo(oracle, request, oracleFee);
 
         // Save request information for its callback.
-        requests[requestId] = RequestData(
-            _caller,
-            _platformId,
-            _queryParameter
-        );
+        requests[requestId] = RequestData(_msgSender(), _platformId, _userId);
     }
 
-    /// @notice Request the address mentioned in the platform.
-    function _requestTwoStepAddressHash(
-        uint256 _platformId,
-        string memory _param
-    ) internal {
-        _makeRequest(
-            _platformId,
-            _param,
-            platforms[_platformId].apiAddressURL,
-            this.fulfillTwoStepAddressHashRequest.selector,
-            _msgSender()
-        );
-    }
+    // /// @notice Request the address mentioned in the platform.
+    // function _requestTwoStepAddressHash(
+    //     uint256 _platformId,
+    //     string memory _param
+    // ) internal {
+    //     _makeRequest(
+    //         _platformId,
+    //         _param,
+    //         false,
+    //         this.fulfillTwoStepAddressHashRequest.selector,
+    //         _msgSender()
+    //     );
+    // }
 
-    function _requestTwoStepUserId(RequestData memory _previousRequest)
+    // function _requestTwoStepUserId(RequestData memory _previousRequest)
+    //     internal
+    // {
+    //     _makeRequest(
+    //         _previousRequest.platformId,
+    //         _previousRequest.parameter,
+    //         true,
+    //         this.fulfillTwoStepUserIdRequest.selector,
+    //         _previousRequest.caller
+    //     );
+    // }
+
+    function _requestOneStepAddressHash(uint256 _platformId, uint256 _userId)
         internal
     {
         _makeRequest(
-            _previousRequest.platformId,
-            _previousRequest.parameter,
-            platforms[_previousRequest.platformId].apiUserIdURL,
-            this.fulfillTwoStepUserIdRequest.selector,
-            _previousRequest.caller
-        );
-    }
-
-    function _requestOneStepAddressHash(
-        uint256 _platformId,
-        string memory _param
-    ) internal {
-        _makeRequest(
             _platformId,
-            _param,
-            platforms[_platformId].apiAddressURL,
-            this.fulfillOneStepAddressHashRequest.selector,
-            _msgSender()
+            _userId
+            // false,
+            // this.fulfillOneStepAddressHashRequest.selector,
+            // _msgSender()
         );
     }
 
-    function fulfillTwoStepAddressHashRequest(bytes32 _requestId, uint256 _hash)
-        public
-        virtual;
+    // function fulfillTwoStepAddressHashRequest(bytes32 _requestId, uint256 _hash)
+    //     public
+    //     virtual;
 
-    function fulfillTwoStepUserIdRequest(bytes32 _requestId, uint256 _userId)
-        public
-        virtual;
+    // function fulfillTwoStepUserIdRequest(bytes32 _requestId, uint256 _userId)
+    //     public
+    //     virtual;
 
     function fulfillOneStepAddressHashRequest(bytes32 _requestId, uint256 _hash)
         public
         virtual;
+
+    function uint2str(uint256 _i) public pure returns (string memory) {
+        if (_i == 0) {
+            return "0";
+        }
+        uint256 j = _i;
+        uint256 len;
+        while (j != 0) {
+            len++;
+            j /= 10;
+        }
+        bytes memory bstr = new bytes(len);
+        uint256 k = len;
+        while (_i != 0) {
+            k = k - 1;
+            uint8 temp = (48 + uint8(_i - (_i / 10) * 10));
+            bytes1 b1 = bytes1(temp);
+            bstr[k] = b1;
+            _i /= 10;
+        }
+        return string(bstr);
+    }
 }

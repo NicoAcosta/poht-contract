@@ -9,8 +9,6 @@ struct Platform {
     string name;
     // If it requires two step (true) or one step (false) verification
     bool twoStepVerification;
-    string apiAddressURL;
-    string apiUserIdURL;
 }
 
 /// @title Platforms
@@ -28,31 +26,18 @@ contract Platforms is Ownable {
     Platform[] public platforms;
 
     constructor() {
-        _addPlatform(
-            "Twitter",
-            true,
-            "https://us-central1-pohtwitter.cloudfunctions.net/api/tweet-address-hash",
-            "https://us-central1-pohtwitter.cloudfunctions.net/api/tweet-author"
-        );
+        _addPlatform("twitter", true);
     }
 
     /// @notice Adds a new platform to the platforms list.
     /// @dev Appends the new Platform instance to the `platforms` array. Its id is the array position. Emits `NewPlatform` event.
     /// @param _name The new platform's name.
     /// @param _twoStepVerification The new platform's kind of verification: two step (true) or one step (false).
-    function _addPlatform(
-        string memory _name,
-        bool _twoStepVerification,
-        string memory _apiAddressURL,
-        string memory _apiUserIdURL
-    ) private {
+    function _addPlatform(string memory _name, bool _twoStepVerification)
+        private
+    {
         // Create new Platform with its information.
-        Platform memory _platform = Platform(
-            _name,
-            _twoStepVerification,
-            _apiAddressURL,
-            _apiUserIdURL
-        );
+        Platform memory _platform = Platform(_name, _twoStepVerification);
 
         // Add it to the `platforms` list.
         platforms.push(_platform);
@@ -65,17 +50,10 @@ contract Platforms is Ownable {
     }
 
     // Same as the above, but can be called by contract's owner.
-    function addPlatform(
-        string memory _name,
-        string memory _apiAddressURL,
-        string memory _apiUserIdURL,
-        bool _twoStepVerification
-    ) external onlyOwner {
-        _addPlatform(
-            _name,
-            _twoStepVerification,
-            _apiAddressURL,
-            _apiUserIdURL
-        );
+    function addPlatform(string memory _name, bool _twoStepVerification)
+        external
+        onlyOwner
+    {
+        _addPlatform(_name, _twoStepVerification);
     }
 }

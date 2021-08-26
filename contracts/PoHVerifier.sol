@@ -14,7 +14,7 @@ interface IProofOfHumanity {
 /// @author Nicolás Acosta
 /// @notice Verifies some address' web2 profiles in different platforms.
 /// @dev Explain to a developer any extra details
-contract PoHVerifierV1 is APIConsumer {
+contract PoHVerifierV2 is APIConsumer {
     // using Integers for uint256;
 
     event Verification(
@@ -50,50 +50,51 @@ contract PoHVerifierV1 is APIConsumer {
         return verifiedAddress[_platformId][_msgSender()];
     }
 
-    function verify(uint256 _platformId, string memory _queryParameter)
+    function verify(uint256 _platformId, uint256 _userId)
         external
         PoHRegistered
     {
-        platforms[_platformId].twoStepVerification
-            ? _twoStepVerification(_platformId, _queryParameter)
-            : _oneStepVerification(_platformId, _queryParameter);
+        // platforms[_platformId].twoStepVerification
+        //     ? _twoStepVerification(_platformId, _queryParameter)
+        //     :
+        _oneStepVerification(_platformId, _userId);
     }
 
-    function _twoStepVerification(
-        uint256 _platformId,
-        string memory _queryParameter
-    ) private {
-        _requestTwoStepAddressHash(_platformId, _queryParameter);
-    }
+    // function _twoStepVerification(
+    //     uint256 _platformId,
+    //     string memory _queryParameter
+    // ) private {
+    //     _requestTwoStepAddressHash(_platformId, _queryParameter);
+    // }
 
-    function _oneStepVerification(uint256 _platformId, string memory _userId)
+    function _oneStepVerification(uint256 _platformId, uint256 _userId)
         private
     {
         _requestOneStepAddressHash(_platformId, _userId);
     }
 
-    function fulfillTwoStepAddressHashRequest(bytes32 _requestId, uint256 _hash)
-        public
-        override
-        recordChainlinkFulfillment(_requestId)
-    {
-        RequestData memory request = requests[_requestId];
-        require(
-            verifyAddressHash(request.caller, _hash),
-            "Not same address, caller and tweet"
-        );
-        _requestTwoStepUserId(request);
-    }
+    // function fulfillTwoStepAddressHashRequest(bytes32 _requestId, uint256 _hash)
+    //     public
+    //     override
+    //     recordChainlinkFulfillment(_requestId)
+    // {
+    //     RequestData memory request = requests[_requestId];
+    //     require(
+    //         verifyAddressHash(request.caller, _hash),
+    //         "Not same address, caller and tweet"
+    //     );
+    //     _requestTwoStepUserId(request);
+    // }
 
-    function fulfillTwoStepUserIdRequest(bytes32 _requestId, uint256 _userId)
-        public
-        override
-        recordChainlinkFulfillment(_requestId)
-    {
-        require(_userId != 0, "API Error");
-        RequestData memory _request = requests[_requestId];
-        _saveVerification(_request.platformId, _request.caller, _userId);
-    }
+    // function fulfillTwoStepUserIdRequest(bytes32 _requestId, uint256 _userId)
+    //     public
+    //     override
+    //     recordChainlinkFulfillment(_requestId)
+    // {
+    //     require(_userId != 0, "API Error");
+    //     RequestData memory _request = requests[_requestId];
+    //     _saveVerification(_request.platformId, _request.caller, _userId);
+    // }
 
     function fulfillOneStepAddressHashRequest(bytes32 _requestId, uint256 _hash)
         public
@@ -105,10 +106,7 @@ contract PoHVerifierV1 is APIConsumer {
             verifyAddressHash(request.caller, _hash),
             "Not same address, caller and tweet"
         );
-        uint256 _userId = uint256(
-            keccak256(abi.encodePacked(request.parameter))
-        );
-        _saveVerification(request.platformId, request.caller, _userId);
+        _saveVerification(request.platformId, request.caller, request.userId);
     }
 
     function _saveVerification(

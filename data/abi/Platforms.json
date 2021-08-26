@@ -50,16 +50,6 @@
         "type": "string"
       },
       {
-        "internalType": "string",
-        "name": "_apiAddressURL",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "_apiUserIdURL",
-        "type": "string"
-      },
-      {
         "internalType": "bool",
         "name": "_twoStepVerification",
         "type": "bool"
@@ -102,16 +92,6 @@
         "internalType": "bool",
         "name": "twoStepVerification",
         "type": "bool"
-      },
-      {
-        "internalType": "string",
-        "name": "apiAddressURL",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "apiUserIdURL",
-        "type": "string"
       }
     ],
     "stateMutability": "view",
